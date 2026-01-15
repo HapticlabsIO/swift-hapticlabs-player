@@ -260,6 +260,7 @@ public class HapticlabsPlayer: NSObject, AVAudioPlayerDelegate {
           do {
             audioPlayer = try AVAudioPlayer(contentsOf: audioFileURL)
             audioPlayer.prepareToPlay()
+            audioPlayer.delegate = self
 
             preparedAudioPlayers.append((audioPlayer, timestamp))
             self.audioPlayersStore.append(audioPlayer)

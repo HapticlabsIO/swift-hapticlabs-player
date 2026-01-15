@@ -8,11 +8,29 @@ A Swift package for playing Apple AHAP haptics and synchronized audio on iOS.
 - Play predefined iOS haptic effects
 - Automatic resource management
 
+
 ## Installation
-Add this package to your Xcode project using Swift Package Manager:
+
+HapticlabsPlayer can be integrated into your project using either Swift Package Manager or CocoaPods.
+
+### Swift Package Manager
+Add this package to your Xcode project:
 
 ```
 https://github.com/HapticlabsIO/swift-hapticlabs-player.git
+```
+
+### CocoaPods
+Add the following to your Podfile:
+
+```
+pod 'HapticlabsPlayer', :git => 'https://github.com/HapticlabsIO/swift-hapticlabs-player.git', :tag => 'v0.1.0'
+```
+
+Then run:
+
+```
+pod install
 ```
 
 ## Usage

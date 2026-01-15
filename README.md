@@ -44,7 +44,7 @@ import HapticlabsPlayer
 ```swift
 let player = HapticlabsPlayer()
 player.playAHAP(
-    ahapPath: "path/to/file.ahap",
+    ahapPath: "/path/to/file.ahap",
     onCompletion: { print("Playback completed") },
     onFailure: { error in print("Error: \(error)") }
 )
@@ -67,7 +67,7 @@ public func playAHAP(
     onFailure: @escaping (String) -> Void
 )
 ```
-Plays an AHAP file (and referenced audio/AHAPs). Calls `onCompletion` when finished, or `onFailure` with an error message.
+Plays an AHAP file (and referenced audio/AHAPs). Calls `onCompletion` when finished, or `onFailure` with an error message. Accepts absolute paths and paths that are relative to the bundle root.
 
 #### Haptics/Audio Mute
 ```swift

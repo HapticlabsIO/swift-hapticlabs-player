@@ -317,7 +317,7 @@ public class HapticlabsPlayer: NSObject, AVAudioPlayerDelegate {
 
   /// Plays an AHAP file along with referenced other AHAP files and audio.
   /// - Parameters:
-  ///   - ahapPath: Path to the AHAP file
+  ///   - ahapPath: Path to the AHAP file (absolute in the filesystem, or relative to the bundle root)
   ///   - onCompletion: called when the playback successfully completed
   ///   - onFailure: called on error. Passes the error message
   public func playAHAP(
@@ -327,10 +327,20 @@ public class HapticlabsPlayer: NSObject, AVAudioPlayerDelegate {
     // Find filenames from the AHAP
     // Load the ahap file
 
-    let ahapURL = URL(string: "file://" + ahapPath)
+    // Handle bundled AHAP files
+    let fullPath =
+      if ahapPath.starts(with: "/") {
+        ahapPath
+      } else {
+        // Not a full path, try to find in main bundle
+        Bundle.main.path(forResource: ahapPath, ofType: nil) ?? Bundle.main.path(
+          forResource: ahapPath, ofType: "ahap") ?? ahapPath
+      }
+
+    let ahapURL = URL(string: "file://" + fullPath)
     let parentDirectoryURL = ahapURL?.deletingLastPathComponent()
     do {
-      let data = try Data(contentsOf: URL(string: "file://" + ahapPath)!)
+      let data = try Data(contentsOf: URL(string: "file://" + fullPath)!)
       // Parse the json
       let decoder = JSONDecoder()
 
@@ -372,10 +382,10 @@ public class HapticlabsPlayer: NSObject, AVAudioPlayerDelegate {
       }
 
       playAHAPs(
-        ahapPaths: [ahapPath] + otherPaths, onCompletion: onCompletion, onFailure: onFailure)
+        ahapPaths: [fullPath] + otherPaths, onCompletion: onCompletion, onFailure: onFailure)
 
     } catch {
-      onFailure("Failed to load ahap: " + ahapPath + " because \(error)")
+      onFailure("Failed to load ahap: " + fullPath + " because \(error)")
       return
     }
   }

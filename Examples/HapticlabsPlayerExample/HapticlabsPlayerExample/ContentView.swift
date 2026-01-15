@@ -11,17 +11,10 @@ import SwiftUICore
 
 @available(iOS 13.0, *)
 struct ContentView: View {
-    private func ahapButton(title: String, resource: String, notFoundMessage: String) -> some View {
+    private func ahapButton(title: String, resource: String) -> some View {
         Button(title) {
-            let ahapPath = Bundle.main.path(forResource: resource, ofType: "ahap") ?? ""
-            if ahapPath.isEmpty {
-                statusMessage = notFoundMessage
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    statusMessage = ""
-                }
-            } else {
                 player.playAHAP(
-                    ahapPath: ahapPath,
+                    ahapPath: resource,
                     onCompletion: {
                         statusMessage = "Playback completed"
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -35,7 +28,7 @@ struct ContentView: View {
                         }
                     }
                 )
-            }
+            
         }
     }
     @State private var player = HapticlabsPlayer()
@@ -68,11 +61,9 @@ struct ContentView: View {
             }
 
             ahapButton(
-                title: "Play AHAP with audio", resource: "AHAP/Button",
-                notFoundMessage: "Button.ahap not found in bundle")
+                title: "Play AHAP with audio", resource: "AHAP/Button.ahap")
             ahapButton(
-                title: "Play cat AHAP", resource: "AHAP/CatPurring",
-                notFoundMessage: "CatPurring.ahap not found in bundle")
+                title: "Play cat AHAP", resource: "AHAP/CatPurring")
 
             Text(statusMessage)
                 .font(.footnote)

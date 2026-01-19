@@ -24,7 +24,7 @@ https://github.com/HapticlabsIO/swift-hapticlabs-player.git
 Add the following to your Podfile:
 
 ```
-pod 'HapticlabsPlayer', '~> v0.1.2'
+pod 'HapticlabsPlayer', '~> v0.2.0'
 ```
 
 Then run:

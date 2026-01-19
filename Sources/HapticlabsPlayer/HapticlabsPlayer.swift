@@ -78,17 +78,31 @@ struct AHAP: Codable {
 }
 
 @available(macOS 10.15, *)
-public class HapticlabsPlayer: NSObject, AVAudioPlayerDelegate {
+public class HapticlabsPlayer: NSObject {
   var engine: CHHapticEngine?
   // Store AVAudioPlayers to keep them alive during playback
   var audioPlayersStore: [AVAudioPlayer] = []
+  // Single delegate instance for all audio players
+  private let audioPlayerDelegate: AudioPlayerDelegate
 
-  public override init() {
+  private class AudioPlayerDelegate: NSObject, AVAudioPlayerDelegate {
+    weak var parent: HapticlabsPlayer?
+    init(parent: HapticlabsPlayer?) {
+      self.parent = parent
+    }
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+      parent?.removeAudioPlayer(player)
+    }
+  }
+
+  @objc public override init() {
+    self.audioPlayerDelegate = AudioPlayerDelegate(parent: nil)
     super.init()
+    self.audioPlayerDelegate.parent = self
     createEngine()
   }
 
-  public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+  private func removeAudioPlayer(_ player: AVAudioPlayer) {
     if let idx = self.audioPlayersStore.firstIndex(of: player) {
       self.audioPlayersStore.remove(at: idx)
     }
@@ -260,7 +274,7 @@ public class HapticlabsPlayer: NSObject, AVAudioPlayerDelegate {
           do {
             audioPlayer = try AVAudioPlayer(contentsOf: audioFileURL)
             audioPlayer.prepareToPlay()
-            audioPlayer.delegate = self
+            audioPlayer.delegate = self.audioPlayerDelegate
 
             preparedAudioPlayers.append((audioPlayer, timestamp))
             self.audioPlayersStore.append(audioPlayer)
@@ -291,27 +305,27 @@ public class HapticlabsPlayer: NSObject, AVAudioPlayerDelegate {
 
   /// Mute and unmute AHAP-defined haptics.
   /// - Parameter mute: whether to mute (true) or unmute (false) haptics
-  public func setHapticsMute(mute: Bool) {
+  @objc public func setHapticsMute(mute: Bool) {
     // Mute haptics
     engine?.isMutedForHaptics = mute
   }
 
   /// Mute and unmute AHAP-defined audio
   /// - Parameter mute: whether to mute (true) or unmute (false) audio
-  public func setAudioMute(mute: Bool) {
+  @objc public func setAudioMute(mute: Bool) {
     // Mute audio
     engine?.isMutedForAudio = mute
   }
 
   /// Whether AHAP-defined haptics are muted
   /// - Returns: true if haptics are muted, false else
-  public func isHapticsMuted() -> Bool {
+  @objc public func isHapticsMuted() -> Bool {
     return engine?.isMutedForHaptics ?? false
   }
 
   /// Whether AHAP-defined audio is muted
   /// - Returns: true if audio is muted, false else
-  public func isAudioMuted() -> Bool {
+  @objc public func isAudioMuted() -> Bool {
     return engine?.isMutedForAudio ?? false
   }
 
@@ -320,9 +334,9 @@ public class HapticlabsPlayer: NSObject, AVAudioPlayerDelegate {
   ///   - ahapPath: Path to the AHAP file (absolute in the filesystem, or relative to the bundle root)
   ///   - onCompletion: called when the playback successfully completed
   ///   - onFailure: called on error. Passes the error message
-  public func playAHAP(
-    ahapPath: String, onCompletion: @escaping () -> Void,
-    onFailure: @escaping (String) -> Void
+  @objc public func playAHAP(
+    ahapPath: String, onCompletion: @escaping () -> Void = {},
+    onFailure: @escaping (String) -> Void = { _ in }
   ) {
     // Find filenames from the AHAP
     // Load the ahap file
@@ -393,7 +407,7 @@ public class HapticlabsPlayer: NSObject, AVAudioPlayerDelegate {
   #if os(iOS)
     /// Plays one of the predefined haptic effects
     /// - Parameter name: the effect to play. Must be one of `"light"`, `"medium"`, `"heavy"`, `"rigid"`, `"soft"`, `"error"`, `"warning"`, `"success"`, `"selection"`
-    @MainActor public func playPredefinedIOSVibration(_ name: String) {
+    @objc @MainActor public func playPredefinedIOSVibration(_ name: String) {
       // Log the received data
       if name == "light" {
         let feedbackGenerator = UIImpactFeedbackGenerator(style: .light)

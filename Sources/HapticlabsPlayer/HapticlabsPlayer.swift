@@ -22,13 +22,31 @@ class AHAPSyncPlayer {
     // Load all referenced AHAP files into memory to reduce latency.
     let ahapDatas = ahapURLs.map { try! Data(contentsOf: $0) }
 
+    // Get durations of all AHAP files.
+    let ahapDurations: [TimeInterval] = ahapURLs.map { ahapURL in
+      do {
+        if #available(macOS 13.0, iOS 16.0, *) {
+          let pattern = try CHHapticPattern(contentsOf: ahapURL)
+          return pattern.duration
+        } else {
+          // Fallback on earlier versions
+          return 0.0
+        }
+      } catch {
+        return 0.0
+      }
+    }
+
+    let longestDuration = ahapDurations.max() ?? 0.0
+
     return try self.play(
-      ahapDatas: ahapDatas, onCompletion: onCompletion, onFailure: onFailure, isRetry: false)
+      ahapDatas: ahapDatas, onCompletion: onCompletion, onFailure: onFailure, isRetry: false,
+      totalDuration: longestDuration)
   }
 
   func play(
     ahapDatas: [Data], onCompletion: @escaping () -> Void,
-    onFailure: @escaping (String) -> Void, isRetry: Bool
+    onFailure: @escaping (String) -> Void, isRetry: Bool, totalDuration: TimeInterval
   ) throws {
     // Start the engine in case it's idle.
     try self.engine.start()
@@ -46,7 +64,8 @@ class AHAPSyncPlayer {
         // Try again
         if !isRetry {
           return try self.play(
-            ahapDatas: ahapDatas, onCompletion: onCompletion, onFailure: onFailure, isRetry: true)
+            ahapDatas: ahapDatas, onCompletion: onCompletion, onFailure: onFailure, isRetry: true,
+            totalDuration: totalDuration)
         } else {
           onFailure("Failed to play AHAPs: \(error)")
           return
@@ -54,12 +73,27 @@ class AHAPSyncPlayer {
       }
     }
 
+    // Schedule completion handler on a custom serial queue
+    // Store a reference to the completion work item so it can be cancelled if needed
+    let completionQueue = DispatchQueue(label: "AHAPSyncPlayer.completionQueue")
+    var completionWorkItem: DispatchWorkItem?
+
+    // Wrap onCompletion in a DispatchWorkItem
+    completionWorkItem = DispatchWorkItem { [onCompletion] in
+      onCompletion()
+    }
+
+    // Schedule the completion handler
+    if let workItem = completionWorkItem {
+      completionQueue.asyncAfter(deadline: .now() + totalDuration, execute: workItem)
+    }
+
     // Use a weak reference to self to avoid retain cycles
     self.engine.notifyWhenPlayersFinished(finishedHandler: { error in
       if let error = error {
-        onFailure("Failed to play AHAPs: \(error)")
-      } else {
-        onCompletion()
+      // Cancel the scheduled completion if failure occurs
+      completionWorkItem?.cancel()
+      onFailure("Failed to play AHAPs: \(error)")
       }
       return .leaveEngineRunning
     })
@@ -125,6 +159,8 @@ public class HapticlabsPlayer: NSObject {
     // Keep track of the timestamps at which to play audio directly
     var audioFileTimestamps: [(String, Double)] = []
 
+    var maxDuration = 0.0
+
     let decoder = JSONDecoder()
     do {
       // Read the AHAP files and check if any audio files need to be copied to the documents directory.
@@ -137,6 +173,15 @@ public class HapticlabsPlayer: NSObject {
         // Load the ahap file
         let data = try Data(contentsOf: ahapURL)
 
+        var duration: TimeInterval? = nil
+        do {
+          if #available(macOS 13.0, iOS 16.0, *) {
+            duration = try CHHapticPattern(contentsOf: ahapURL).duration
+          } else {
+            duration = nil
+          }
+        } catch { duration = nil }
+
         let parentDirectoryURL = ahapURL.deletingLastPathComponent()
 
         let ahap = try decoder.decode(AHAP.self, from: data)
@@ -144,6 +189,30 @@ public class HapticlabsPlayer: NSObject {
         // Extract AHAP_FILES from the description
         let description = ahap.Metadata.Description
         let descriptionParts = description.split(separator: "\n")
+
+        // Get the duration from the description if not available from CHHapticPattern
+        if duration == nil {
+          if let totalDurationDescriptionPartIndex = descriptionParts.firstIndex(where: {
+            $0.starts(with: "TOTAL_DURATION=")
+          }) {
+            let durationFormat = "^TOTAL_DURATION=([0-9.]+)$"
+            let durationRegex = try! NSRegularExpression(pattern: durationFormat, options: [])
+            let durationDescriptionPart = String(
+              descriptionParts[totalDurationDescriptionPartIndex])
+
+            if let match = durationRegex.firstMatch(
+              in: durationDescriptionPart, options: [],
+              range: NSRange(location: 0, length: durationDescriptionPart.utf16.count))
+            {
+              if let range = Range(match.range(at: 1), in: durationDescriptionPart) {
+                let durationString = durationDescriptionPart[range]
+                if let parsedDuration = Double(durationString) {
+                  duration = parsedDuration
+                }
+              }
+            }
+          }
+        }
 
         if let supportingAudioDescriptionPartIndex = descriptionParts.firstIndex(where: {
           $0.starts(with: "AUDIO_FILES=")
@@ -253,6 +322,12 @@ public class HapticlabsPlayer: NSObject {
           let modifiedData = try JSONSerialization.data(
             withJSONObject: fullAHAPDict, options: [])
           datas.append(modifiedData)
+
+          if let foundDuration = duration {
+            if foundDuration > maxDuration {
+              maxDuration = foundDuration
+            }
+          }
         } else {
           datas.append(data)
         }
@@ -285,7 +360,8 @@ public class HapticlabsPlayer: NSObject {
 
         // Start the AHAPs (haptics) playback
         try player.play(
-          ahapDatas: datas, onCompletion: onCompletion, onFailure: onFailure, isRetry: false)
+          ahapDatas: datas, onCompletion: onCompletion, onFailure: onFailure, isRetry: false,
+          totalDuration: maxDuration)
 
         // Schedule audio playback after starting haptics
         for (player, timestamp) in preparedAudioPlayers {
